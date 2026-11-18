@@ -59,7 +59,7 @@ The list contains local folder paths. Removing an entry from GitDeck does not re
 If GitDeck is useful to you, you can support its development with a coffee. Thank you for helping the project grow!
 
 <p align="center">
-  <a href="https://www.buymeacoffee.com/razak.dj">
-    <img src="https://img.buymeacoffee.com/button-api/?text=Buy+me+a+coffee&emoji=☕&slug=razak.dj&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff" alt="Buy Me a Coffee" />
+  <a href="https://www.buymeacoffee.com/razak.dj" aria-label="Buy me a coffee">
+    <img src=".github/assets/buy-me-a-coffee.svg" alt="Buy Me a Coffee" width="220" />
   </a>
 </p>
