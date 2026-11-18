@@ -53,3 +53,13 @@ GitDeck stores repository paths in a small configuration file on your device:
 - **macOS and Linux:** `~/.config/gitdeck/repositories.json` (or `$XDG_CONFIG_HOME/gitdeck/repositories.json` when `XDG_CONFIG_HOME` is set)
 
 The list contains local folder paths. Removing an entry from GitDeck does not remove or modify the repository itself.
+
+## Support GitDeck
+
+If GitDeck is useful to you, you can support its development with a coffee. Thank you for helping the project grow!
+
+<p align="center">
+  <a href="https://www.buymeacoffee.com/razak.dj">
+    <img src="https://img.buymeacoffee.com/button-api/?text=Buy+me+a+coffee&emoji=☕&slug=razak.dj&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff" alt="Buy Me a Coffee" />
+  </a>
+</p>
