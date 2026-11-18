@@ -3,6 +3,20 @@
   "version": "1.0.0",
   "private": true,
   "description": "Manage local Git repositories from a minimal terminal interface",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/razak-tech/GitDeck.git"
+  },
+  "homepage": "https://github.com/razak-tech/GitDeck#readme",
+  "bugs": {
+    "url": "https://github.com/razak-tech/GitDeck/issues"
+  },
+  "keywords": [
+    "git",
+    "terminal",
+    "tui",
+    "repository-manager"
+  ],
   "bin": {
     "gitdeck": "./gitdeck.js"
   },

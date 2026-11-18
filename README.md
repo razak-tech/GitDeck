@@ -1,26 +1,55 @@
 # GitDeck
 
-A fast, lightweight terminal app for managing local Git repositories. GitDeck has a focused, keyboard-driven interface with a large terminal wordmark and a custom geometric icon. No graphical interface or extra packages are required; you only need Node.js and Git.
+**A clean, keyboard-first home for your local Git repositories.**
 
-## Run
+GitDeck is a lightweight terminal app that keeps your projects in one place. Add each repository once, then check its status, pull or push changes, or open a shell directly in its folder.
 
-From this folder, run:
+## Features
+
+- Keep a personal list of local Git repositories.
+- See each repository's current branch and remote tracking branch.
+- View working tree status, pull updates, and push changes.
+- Open a shell at the repository root. On Windows, the colored PowerShell prompt shows the local and tracking branches and refreshes as you switch branches.
+- Remove a repository from GitDeck without deleting its files.
+- No third-party packages or graphical interface required.
+
+## Requirements
+
+- [Node.js](https://nodejs.org/) 18 or newer
+- [Git](https://git-scm.com/) available on your `PATH`
+- An interactive terminal
+
+## Get started
 
 ```powershell
+git clone https://github.com/razak-tech/GitDeck.git
+cd GitDeck
 npm start
 ```
 
-Or launch it directly:
+You can also start GitDeck with `node gitdeck.js` from the project folder.
 
-```powershell
-node gitdeck.js
-```
+## Using GitDeck
 
-Use ↑ and ↓ to move through the menu, then press Enter to select. On the home screen, press A to add a repository or Q to quit. Add a repository path once and GitDeck will remember it on this device. Select a project to view its status, pull updates, push changes, or open a shell directly in its folder. In a project menu, use S for status, L to pull, U to push, T to open a shell, and R to remove the project from the list. The Windows project shell uses a colored prompt that shows the current local branch and its remote tracking branch; it updates as you switch branches.
+Use the arrow keys to move through a menu and press **Enter** to select an item. Shortcuts are shown next to menu actions.
 
-## Repository list location
+| Screen | Key | Action |
+| --- | --- | --- |
+| Home | `A` | Add a local repository |
+| Home | `Q` | Quit GitDeck |
+| Project | `S` | View repository status |
+| Project | `L` | Pull updates |
+| Project | `U` | Push changes |
+| Project | `T` | Open a shell in the repository |
+| Project | `R` | Remove the repository from the list |
 
-- Windows: `%APPDATA%\gitdeck\repositories.json`
-- macOS and Linux: `~/.config/gitdeck/repositories.json` (or `XDG_CONFIG_HOME` when set)
+When adding a project, enter the path to its repository folder. GitDeck records the repository root, even if you enter a nested folder. In the project shell, use Git or run your usual development commands; type `exit` to return to GitDeck.
 
-Removing a project from the list does not delete its files.
+## Where GitDeck stores your list
+
+GitDeck stores repository paths in a small configuration file on your device:
+
+- **Windows:** `%APPDATA%\gitdeck\repositories.json`
+- **macOS and Linux:** `~/.config/gitdeck/repositories.json` (or `$XDG_CONFIG_HOME/gitdeck/repositories.json` when `XDG_CONFIG_HOME` is set)
+
+The list contains local folder paths. Removing an entry from GitDeck does not remove or modify the repository itself.
