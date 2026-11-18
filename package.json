@@ -1,0 +1,15 @@
+{
+  "name": "gitdeck",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Manage local Git repositories from a minimal terminal interface",
+  "bin": {
+    "gitdeck": "./gitdeck.js"
+  },
+  "scripts": {
+    "start": "node gitdeck.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
