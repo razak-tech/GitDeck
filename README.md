@@ -16,7 +16,7 @@ Or launch it directly:
 node gitdeck.js
 ```
 
-Use ↑ and ↓ to move through the menu, then press Enter to select. On the home screen, press A to add a repository or Q to quit. Add a repository path once and GitDeck will remember it on this device. Select a project to view its status, pull updates, push changes, or open a shell directly in its folder. In a project menu, use S for status, L to pull, U to push, T to open a shell, and R to remove the project from the list.
+Use ↑ and ↓ to move through the menu, then press Enter to select. On the home screen, press A to add a repository or Q to quit. Add a repository path once and GitDeck will remember it on this device. Select a project to view its status, pull updates, push changes, or open a shell directly in its folder. In a project menu, use S for status, L to pull, U to push, T to open a shell, and R to remove the project from the list. The Windows project shell uses a colored prompt that shows the current local branch and its remote tracking branch; it updates as you switch branches.
 
 ## Repository list location
 

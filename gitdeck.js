@@ -55,6 +55,15 @@ function branchAt(dir) {
   return result.status === 0 ? (result.stdout.trim() || "detached HEAD") : "unavailable";
 }
 
+function upstreamAt(dir) {
+  const result = git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"], dir);
+  return result.status === 0 ? result.stdout.trim() : "no upstream";
+}
+
+function branchLabel(dir) {
+  return `${branchAt(dir)}  →  ${upstreamAt(dir)}`;
+}
+
 function repoName(repo) { return repo.name || path.basename(repo.path); }
 
 function clear() { process.stdout.write(`${esc}2J${esc}H`); }
@@ -188,9 +197,36 @@ async function showStatus(repo) {
 
 function openShell(repo) {
   process.stdin.setRawMode(false);
-  process.stdout.write(`\n  ${dim(`Shell opened in ${repo.path}. Type exit to return to GitDeck.`)}\n\n`);
-  const shell = process.env.SHELL || (isWin ? (process.env.COMSPEC || "powershell.exe") : "bash");
-  const child = spawn(shell, [], { cwd: repo.path, stdio: "inherit", windowsHide: false });
+  const local = branchAt(repo.path);
+  const upstream = upstreamAt(repo.path);
+  frame("Project shell", repo.path);
+  process.stdout.write(`  ${dim("LOCAL BRANCH")}   ${cyan(local)}\n`);
+  process.stdout.write(`  ${dim("TRACKING BRANCH")} ${upstream === "no upstream" ? dim(upstream) : cyan(upstream)}\n\n`);
+  process.stdout.write(`  ${dim("The colored prompt updates these branches as you work. Type exit to return.")}\n\n`);
+
+  let shell;
+  let args = [];
+  if (isWin) {
+    shell = "powershell.exe";
+    const promptScript = [
+      "function global:prompt {",
+      "  $localBranch = (& git branch --show-current 2>$null | Out-String).Trim()",
+      "  if (-not $localBranch) { $localBranch = 'detached HEAD' }",
+      "  $upstreamBranch = (& git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>$null | Out-String).Trim()",
+      "  if (-not $upstreamBranch) { $upstreamBranch = 'no upstream' }",
+      "  Write-Host -NoNewline -ForegroundColor DarkGray \"$((Get-Location).Path)  \"",
+      "  Write-Host -NoNewline -ForegroundColor Cyan \"[$localBranch] \"",
+      "  Write-Host -NoNewline -ForegroundColor DarkGray '→ ' ",
+      "  Write-Host -NoNewline -ForegroundColor Magenta \"[$upstreamBranch]\"",
+      "  Write-Host -NoNewline -ForegroundColor Green \"`n❯ \"",
+      "  return ' ' ",
+      "}",
+    ].join("\n");
+    args = ["-NoLogo", "-NoExit", "-Command", promptScript];
+  } else {
+    shell = process.env.SHELL || "bash";
+  }
+  const child = spawn(shell, args, { cwd: repo.path, stdio: "inherit", windowsHide: false });
   return new Promise((resolve, reject) => {
     child.once("error", reject);
     child.once("exit", () => { process.stdin.pause(); resolve(); });
@@ -207,7 +243,7 @@ async function repoMenu(repo, repos) {
       { label: "Remove from list", hint: "Repository files are kept", key: "r" },
       { label: "Back", key: "b" },
     ];
-    const choice = await choose(repoName(repo), `${repo.path}  ·  ${branchAt(repo.path)}`, actions);
+    const choice = await choose(repoName(repo), `${repo.path}  ·  ${branchLabel(repo.path)}`, actions);
     if (choice < 0 || choice === 5) return;
     if (choice === 0) await showStatus(repo);
     if (choice === 1 || choice === 2) {
@@ -235,7 +271,7 @@ async function main() {
   while (true) {
     const projectItems = repos.map((repo) => ({
       label: repoName(repo),
-      hint: `${branchAt(repo.path)}  ·  ${path.dirname(repo.path)}`,
+      hint: `${branchLabel(repo.path)}  ·  ${path.dirname(repo.path)}`,
     }));
     const items = [...projectItems, { label: "+ Add repository", hint: "From a local path", key: "a" }, { label: "Quit", key: "q" }];
     const choice = await choose("Your repositories", repos.length ? "Select a project to get started" : "Add your first local Git repository", items, 0, true);
