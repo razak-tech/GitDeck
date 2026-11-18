@@ -60,6 +60,6 @@ If GitDeck is useful to you, you can support its development with a coffee. Than
 
 <p align="center">
   <a href="https://www.buymeacoffee.com/razak.dj" aria-label="Buy me a coffee">
-    <img src=".github/assets/buy-me-a-coffee.svg" alt="Buy Me a Coffee" width="220" />
+    <img src="assets/buy-me-a-coffee.png" alt="Buy Me a Coffee" width="220" />
   </a>
 </p>
