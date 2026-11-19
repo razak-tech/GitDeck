@@ -20,6 +20,7 @@ const themes = {
   emerald: { name: "Emerald", primary: "38;5;84", secondary: "38;5;49", success: "38;5;120", danger: "38;5;203", warning: "38;5;220", muted: "38;5;245", selection: "48;5;22;1" },
   violet: { name: "Violet", primary: "38;5;141", secondary: "38;5;213", success: "38;5;114", danger: "38;5;203", warning: "38;5;220", muted: "38;5;245", selection: "48;5;54;1" },
   amber: { name: "Amber", primary: "38;5;220", secondary: "38;5;208", success: "38;5;114", danger: "38;5;203", warning: "38;5;227", muted: "38;5;245", selection: "48;5;94;1" },
+  terracotta: { name: "Terracotta Orange", primary: "38;2;224;136;103", secondary: "38;2;246;173;134", success: "38;5;114", danger: "38;5;203", warning: "38;5;220", muted: "38;5;248", selection: "48;2;86;47;36;1", logoShadow: "38;2;151;84;64" },
   monochrome: { name: "Monochrome", primary: "37", secondary: "97", success: "37", danger: "37", warning: "37", muted: "90", selection: "48;5;238;1" },
 };
 
@@ -110,8 +111,13 @@ function branchLabel(dir) {
 
 function projectHint(repo) {
   const root = repositoryRoot(repo.path);
-  if (!root) return `${yellow("PATH UNAVAILABLE")}  ·  Select to update`;
-  return `${branchLabel(root)}  ·  ${path.dirname(root)}`;
+  if (!root) return [{ text: "Path unavailable", paint: yellow }];
+  const upstream = upstreamAt(root);
+  return [
+    { text: branchAt(root), paint: accent },
+    { text: " / " + upstream, paint: upstream === "no upstream" ? yellow : cyan },
+    { text: "  |  " + root, paint: cyan },
+  ];
 }
 
 function repoName(repo) { return repo.name || path.basename(repo.path); }
@@ -128,20 +134,29 @@ function truncate(value, maxLength) {
 
 function cursorRowAfter(output) { return 1 + (output.match(/\n/g) || []).length; }
 
-function frame(title, subtitle = "") {
+function frame(title, subtitle = "", paintSubtitle = dim) {
   clear();
-  const width = Math.max(24, Math.min(68, (process.stdout.columns || 80) - 6));
+  const width = Math.max(24, (process.stdout.columns || 80) - 5);
   const titleText = truncate(title, Math.max(12, width - 14));
   const subtitleText = truncate(subtitle, width);
-  const output = `\n  ${cyan("◆")} ${bold("GITDECK")}  ${dim("/ ")} ${bold(titleText)}\n${subtitleText ? `  ${dim(subtitleText)}\n` : ""}  ${dim("─".repeat(width))}\n\n`;
+  const output = `\n  ${cyan("◆")} ${bold("GITDECK")}  ${dim("/ ")} ${accent(titleText)}\n${subtitleText ? `  ${paintSubtitle(subtitleText)}\n` : ""}  ${dim("─".repeat(width))}\n\n`;
   process.stdout.write(output);
   return cursorRowAfter(output);
 }
 
-function mainFrame(subtitle) {
+function mainFrame(subtitle, width, margin) {
   clear();
-  const width = Math.max(24, Math.min(68, (process.stdout.columns || 80) - 6));
-  const output = `\n${logo.map((line) => `  ${cyan(line)}\n`).join("")}\n  ${dim("LOCAL REPOSITORY MANAGER")}  ${dim("·")}  ${dim("Fast, focused Git workflows")}\n  ${dim("─".repeat(width))}\n\n  ${bold(truncate(subtitle, width))}\n\n`;
+  const shadow = activeTheme().logoShadow || activeTheme().muted;
+  const wordmark = width >= logo[0].length + 1
+    ? [...logo, ""].map((line, row) => margin + Array.from(
+        { length: logo[0].length + 1 },
+        (_, column) => {
+          if (line[column] === "\u2588") return cyan("\u2588");
+          return logo[row - 1]?.[column - 1] === "\u2588" ? color(shadow, "\u2592") : " ";
+        },
+      ).join("")).join("\n")
+    : margin + cyan("GIT") + bold("DECK");
+  const output = `\n${wordmark}\n\n${margin}${cyan("Repositories")}\n${margin}${dim(truncate(subtitle, width))}\n\n`;
   process.stdout.write(output);
   return cursorRowAfter(output);
 }
@@ -176,36 +191,77 @@ async function choose(title, subtitle, items, selected = 0, isHome = false) {
   process.stdin.resume();
   process.stdout.write("\x1b[?1000h\x1b[?1006h");
   return new Promise((resolve) => {
+    const selectableCount = isHome ? items.length - 2 : items.length;
     let itemRows = [];
     let inputBuffer = "";
     const finish = (choice) => {
       process.stdin.off("data", onData);
+      process.stdout.off("resize", draw);
       process.stdout.write("\x1b[?1006l\x1b[?1000l");
       process.stdin.pause();
       resolve(choice);
     };
     const draw = () => {
-      let row = isHome ? mainFrame(subtitle) : frame(title, subtitle);
+      const columns = process.stdout.columns || 80;
+      const width = Math.max(8, columns - 5);
+      const margin = "  ";
+      let row = isHome ? mainFrame(subtitle, width, margin) : frame(title, subtitle);
       itemRows = [];
-      const width = Math.max(24, Math.min(68, (process.stdout.columns || 80) - 6));
-      items.forEach((item, i) => {
-        itemRows[i] = row;
+      const rows = process.stdout.rows || 24;
+      const repoCount = isHome ? items.length - 3 : items.length;
+      const capacity = Math.max(1, rows - row - (isHome ? 3 : 1));
+      const first = Math.max(0, Math.min(selected, repoCount - 1) - capacity + 1);
+      const drawItem = (item, i) => {
+        itemRows[i] = row++;
+        const shortcut = item.key ? item.key.toUpperCase() + " " : "  ";
+        const room = width - 3 - shortcut.length;
+        const repository = Array.isArray(item.hint);
+        const nameWidth = Math.min(24, Math.max(8, Math.floor(room * 0.23)));
+        const branchWidth = Math.min(24, Math.max(6, Math.floor(room * 0.22)));
+        const name = truncate(item.label, Math.min(repository ? nameWidth : 32, room));
+        const label = repository ? name.padEnd(Math.min(nameWidth, room)) : name;
+        const hintRoom = room - label.length - 2;
+        const parts = Array.isArray(item.hint) ? item.hint : [{ text: item.hint || "", paint: dim }];
+        let remaining = Math.max(0, hintRoom);
+        let hint = "", paintedHint = "";
+        for (const [index, { text, paint }] of parts.entries()) {
+          if (remaining < 4 || !text) break;
+          const column = repository && parts.length === 3 && index < 2
+            ? Math.min(remaining, branchWidth + (index === 1 ? 3 : 0))
+            : remaining;
+          const segment = repository && parts.length === 3 && index < 2
+            ? truncate(text, column).padEnd(column)
+            : truncate(text, column);
+          hint += segment;
+          paintedHint += paint(segment);
+          remaining -= Array.from(segment).length;
+        }
+        const gap = hint ? "  " : "";
+        const padding = " ".repeat(Math.max(0, room - Array.from(label + gap + hint).length));
         const active = i === selected;
-        const marker = active ? cyan("◆") : dim("·");
-        const shortcut = item.key ? dim(`[${item.key}] `) : "";
-        const labelRoom = Math.min(32, Math.max(8, width - 24));
-        const labelText = truncate(item.label, labelRoom);
-        const label = active ? inverse(` ${labelText} `) : labelText;
-        const hintRoom = Math.max(0, width - 5 - (item.key ? item.key.length + 3 : 0) - labelText.length - 4);
-        const hint = item.hint && hintRoom > 2 ? `  ${dim(truncate(item.hint, hintRoom))}` : "";
-        process.stdout.write(`  ${marker}  ${shortcut}${label}${hint}\n\n`);
-        row += 2;
-      });
-      const footer = isHome
-        ? "↑ ↓ navigate   Enter open   A add repository   S settings   Q quit"
-        : "↑ ↓ navigate   Enter select   Q back";
-      process.stdout.write(`\n  ${dim("─".repeat(Math.max(24, Math.min(68, (process.stdout.columns || 80) - 6))))}\n`);
-      process.stdout.write(`  ${dim(`${footer}   Mouse: click an item   Scroll to move`)}`);
+        const paintedLabel = item.paint ? item.paint(label) : Array.isArray(item.hint) ? bold(label) : label;
+        const content = active
+          ? inverse("  " + (paintedLabel + gap + paintedHint).replaceAll(esc + "0m", esc + "0;" + activeTheme().selection + "m") + padding + shortcut)
+          : "  " + paintedLabel + gap + paintedHint + padding + accent(shortcut);
+        process.stdout.write(margin + (active ? cyan("\u258c") : " ") + content + "\n");
+      };
+      items.slice(first, Math.min(repoCount, first + capacity))
+        .forEach((item, offset) => drawItem(item, first + offset));
+      if (isHome) {
+        process.stdout.write("\n");
+        row++;
+        drawItem(items[repoCount], repoCount);
+      }
+      const footer = isHome ? "Up/Down move   Enter shell   E Edit   S Settings   Q Quit" : "Up/Down move   Enter select   Q Back";
+      const footerText = truncate(footer, width).split("   ").map((part, index) =>
+        (index ? accent : cyan)(part)
+      ).join("   ");
+      if (row + 1 < rows) {
+        process.stdout.write(margin + dim("\u2500".repeat(width)) + "\n");
+        row++;
+      }
+      process.stdout.write("\n".repeat(Math.max(0, rows - row)) + margin + footerText);
+
     };
     draw();
     const onData = (buffer) => {
@@ -221,10 +277,10 @@ async function choose(title, subtitle, items, selected = 0, isHome = false) {
           const button = Number(mouse[1]);
           const y = Number(mouse[3]);
           if ((button & 64) !== 0 && mouse[4] === "M") {
-            selected = (selected + ((button & 1) === 0 ? -1 : 1) + items.length) % items.length;
+            selected = (selected + ((button & 1) === 0 ? -1 : 1) + selectableCount) % selectableCount;
             draw();
           } else if ((button & 3) === 0 && mouse[4] === "M") {
-            const clicked = itemRows.findIndex((top) => y >= top && y < top + 2);
+            const clicked = itemRows.indexOf(y);
             if (clicked >= 0) finish(clicked);
           }
         }
@@ -238,8 +294,12 @@ async function choose(title, subtitle, items, selected = 0, isHome = false) {
       if (inputBuffer.startsWith("\x1b[<")) return;
       const key = inputBuffer;
       inputBuffer = "";
-      if (key === "\u001b[A" || key === "k") selected = (selected - 1 + items.length) % items.length;
-      else if (key === "\u001b[B" || key === "j") selected = (selected + 1) % items.length;
+      if (key === "\u001b[A" || key === "k") selected = (selected - 1 + selectableCount) % selectableCount;
+      else if (key === "\u001b[B" || key === "j") selected = (selected + 1) % selectableCount;
+      else if (isHome && key.toLowerCase() === "e" && selected < selectableCount - 1) {
+        finish({ edit: selected });
+        return;
+      }
       else if (items.some((item) => item.key && key.toLowerCase() === item.key)) {
         const shortcutItem = items.find((item) => item.key && key.toLowerCase() === item.key);
         finish(items.indexOf(shortcutItem));
@@ -255,6 +315,7 @@ async function choose(title, subtitle, items, selected = 0, isHome = false) {
       draw();
     };
     process.stdin.on("data", onData);
+    process.stdout.on("resize", draw);
   });
 }
 
@@ -353,10 +414,10 @@ function openShell(repo) {
   process.stdin.setRawMode(false);
   const local = branchAt(repo.path);
   const upstream = upstreamAt(repo.path);
-  frame("Project shell", repo.path);
-  process.stdout.write(`  ${dim("LOCAL BRANCH")}   ${cyan(local)}\n`);
-  process.stdout.write(`  ${dim("TRACKING BRANCH")} ${upstream === "no upstream" ? dim(upstream) : cyan(upstream)}\n\n`);
-  process.stdout.write(`  ${dim("The prompt shows the folder, local branch, and tracking branch. Type exit to return.")}\n\n`);
+  frame("Project shell", repo.path, cyan);
+  process.stdout.write(`  ${accent("LOCAL BRANCH   ")}   ${green(local)}\n`);
+  process.stdout.write(`  ${accent("TRACKING BRANCH")}   ${upstream === "no upstream" ? yellow(upstream) : cyan(upstream)}\n\n`);
+  process.stdout.write(`  ${dim("The prompt shows the folder, local branch, and tracking branch. Type ")}${accent("exit")}${dim(" to return.")}\n\n`);
 
   let shell;
   let args = [];
@@ -395,23 +456,18 @@ function openShell(repo) {
 }
 
 async function repoMenu(repo, repos) {
-  if (!repositoryRoot(repo.path)) {
-    const updated = await updateRepoPath(repo, repos, true);
-    if (!updated) return;
-  }
   while (true) {
     const actions = [
-      { label: "View status", hint: "Changes and current branch", key: "s" },
-      { label: "Pull updates", hint: "git pull", key: "l" },
-      { label: "Push changes", hint: "git push", key: "u" },
-      { label: "Open project shell", hint: "Starts in the repository folder", key: "t" },
-      { label: "Rename project", hint: "Change its display name", key: "n" },
-      { label: "Update project path", hint: "Relink a moved repository", key: "p" },
-      { label: "Remove from list", hint: "Repository files are kept", key: "r" },
+      { label: "View status", paint: cyan, hint: "Changes and current branch", key: "s" },
+      { label: "Pull updates", paint: cyan, hint: "git pull", key: "l" },
+      { label: "Push changes", paint: green, hint: "git push", key: "u" },
+      { label: "Rename project", paint: accent, hint: "Change its display name", key: "n" },
+      { label: "Update project path", paint: accent, hint: "Relink a moved repository", key: "p" },
+      { label: "Remove from list", paint: yellow, hint: "Repository files are kept", key: "r" },
       { label: "Back", key: "b" },
     ];
-    const choice = await choose(repoName(repo), `${repo.path}  ·  ${branchLabel(repo.path)}`, actions);
-    if (choice < 0 || choice === 7) return;
+    const choice = await choose(`Edit repository / ${repoName(repo)}`, `${repo.path}  ·  ${branchLabel(repo.path)}`, actions);
+    if (choice < 0 || choice === actions.length - 1) return;
     if (choice === 0) await showStatus(repo);
     if (choice === 1 || choice === 2) {
       const operation = choice === 1 ? "pull" : "push";
@@ -420,15 +476,13 @@ async function repoMenu(repo, repos) {
       process.stdout.write(`\n  ${result.status === 0 ? green("Operation complete.") : red("Operation failed.")}\n`);
       await waitKey();
     }
-    if (choice === 3) {
-      await openShell(repo);
-    }
-    if (choice === 4) await renameRepo(repo, repos);
-    if (choice === 5) await updateRepoPath(repo, repos);
-    if (choice === 6) {
+    if (choice === 3) await renameRepo(repo, repos);
+    if (choice === 4) await updateRepoPath(repo, repos);
+    if (choice === 5) {
       const ok = await prompt("Type yes to remove this project from the list");
       if (ok.toLowerCase() === "yes") {
         saveRepos(repos.filter((r) => r !== repo));
+        repos.splice(repos.indexOf(repo), 1);
         return;
       }
     }
@@ -444,15 +498,24 @@ async function main() {
     }));
     const items = [
       ...projectItems,
-      { label: "+ Add repository", hint: "From a local path", key: "a" },
+      { label: "+ Add repository", paint: green, hint: "Choose a local folder", key: "a" },
       { label: "Settings", hint: `Change the app color theme · ${activeTheme().name}`, key: "s" },
       { label: "Quit", key: "q" },
     ];
     const choice = await choose("Your repositories", repos.length ? "Select a project to get started" : "Add your first local Git repository", items, 0, true);
+    if (typeof choice === "object") {
+      await repoMenu(repos[choice.edit], repos);
+      continue;
+    }
     if (choice < 0 || choice === items.length - 1) { clear(); return; }
     if (choice === projectItems.length) await addRepo(repos);
     else if (choice === projectItems.length + 1) await settingsMenu();
-    else if (repos[choice]) await repoMenu(repos[choice], repos);
+    else if (repos[choice]) {
+      const repo = repos[choice];
+      if (repositoryRoot(repo.path) || await updateRepoPath(repo, repos, true)) {
+        await openShell(repo);
+      }
+    }
   }
 }
 
