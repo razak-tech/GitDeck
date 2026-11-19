@@ -7,6 +7,7 @@ GitDeck is a lightweight terminal app that keeps your projects in one place. Add
 ## Features
 
 - Keep a personal list of local Git repositories.
+- Choose an app color theme in **Settings**: Ocean Blue, Emerald, Violet, Amber, or Monochrome. Your choice is saved on your device.
 - Rename a project in the list or relink it after its folder is moved.
 - See each repository's current branch and remote tracking branch.
 - View working tree status, pull updates, and push changes.
@@ -37,6 +38,7 @@ Use the arrow keys or mouse wheel to move through a menu, then press **Enter** o
 | Screen | Key | Action |
 | --- | --- | --- |
 | Home | `A` | Add a local repository |
+| Home | `S` | Open settings and change the app theme |
 | Home | `Q` | Quit GitDeck |
 | Project | `S` | View repository status |
 | Project | `L` | Pull updates |
@@ -54,6 +56,8 @@ GitDeck stores repository paths in a small configuration file on your device:
 
 - **Windows:** `%APPDATA%\gitdeck\repositories.json`
 - **macOS and Linux:** `~/.config/gitdeck/repositories.json` (or `$XDG_CONFIG_HOME/gitdeck/repositories.json` when `XDG_CONFIG_HOME` is set)
+
+Your selected color theme is saved alongside the repository list in `settings.json` in the same `gitdeck` configuration folder. It applies the next time GitDeck starts and is kept separate from your project repositories.
 
 The list contains local folder paths. Removing an entry from GitDeck does not remove or modify the repository itself.
 

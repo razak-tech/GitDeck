@@ -12,15 +12,34 @@ const configDir = isWin
   ? path.join(process.env.APPDATA || path.join(home, "AppData", "Roaming"), "gitdeck")
   : path.join(process.env.XDG_CONFIG_HOME || path.join(home, ".config"), "gitdeck");
 const registryFile = path.join(configDir, "repositories.json");
+const settingsFile = path.join(configDir, "settings.json");
 const esc = "\x1b[";
 const color = (code, value) => `${esc}${code}m${value}${esc}0m`;
-const cyan = (s) => color("38;5;81", s);
-const dim = (s) => color("38;5;245", s);
-const green = (s) => color("38;5;114", s);
-const red = (s) => color("38;5;203", s);
-const yellow = (s) => color("38;5;220", s);
+const themes = {
+  ocean: { name: "Ocean Blue", primary: "38;5;81", secondary: "38;5;45", success: "38;5;114", danger: "38;5;203", warning: "38;5;220", muted: "38;5;245", selection: "48;5;24;1" },
+  emerald: { name: "Emerald", primary: "38;5;84", secondary: "38;5;49", success: "38;5;120", danger: "38;5;203", warning: "38;5;220", muted: "38;5;245", selection: "48;5;22;1" },
+  violet: { name: "Violet", primary: "38;5;141", secondary: "38;5;213", success: "38;5;114", danger: "38;5;203", warning: "38;5;220", muted: "38;5;245", selection: "48;5;54;1" },
+  amber: { name: "Amber", primary: "38;5;220", secondary: "38;5;208", success: "38;5;114", danger: "38;5;203", warning: "38;5;227", muted: "38;5;245", selection: "48;5;94;1" },
+  monochrome: { name: "Monochrome", primary: "37", secondary: "97", success: "37", danger: "37", warning: "37", muted: "90", selection: "48;5;238;1" },
+};
+
+function readSettings() {
+  try {
+    const data = JSON.parse(fs.readFileSync(settingsFile, "utf8"));
+    return { theme: themes[data.theme] ? data.theme : "ocean" };
+  } catch { return { theme: "ocean" }; }
+}
+
+let settings = readSettings();
+const activeTheme = () => themes[settings.theme] || themes.ocean;
+const cyan = (s) => color(activeTheme().primary, s);
+const accent = (s) => color(activeTheme().secondary, s);
+const dim = (s) => color(activeTheme().muted, s);
+const green = (s) => color(activeTheme().success, s);
+const red = (s) => color(activeTheme().danger, s);
+const yellow = (s) => color(activeTheme().warning, s);
 const bold = (s) => color("1", s);
-const inverse = (s) => color("48;5;238;1", s);
+const inverse = (s) => color(activeTheme().selection, s);
 
 const glyphs = {
   G: [" ███ ", "█   █", "█    ", "█ ███", " ███ "],
@@ -45,6 +64,11 @@ function readRepos() {
 function saveRepos(repos) {
   fs.mkdirSync(configDir, { recursive: true });
   fs.writeFileSync(registryFile, `${JSON.stringify(repos, null, 2)}\n`, "utf8");
+}
+
+function saveSettings() {
+  fs.mkdirSync(configDir, { recursive: true });
+  fs.writeFileSync(settingsFile, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
 }
 
 function git(args, cwd, options = {}) {
@@ -178,7 +202,7 @@ async function choose(title, subtitle, items, selected = 0, isHome = false) {
         row += 2;
       });
       const footer = isHome
-        ? "↑ ↓ navigate   Enter open   A add repository   Q quit"
+        ? "↑ ↓ navigate   Enter open   A add repository   S settings   Q quit"
         : "↑ ↓ navigate   Enter select   Q back";
       process.stdout.write(`\n  ${dim("─".repeat(Math.max(24, Math.min(68, (process.stdout.columns || 80) - 6))))}\n`);
       process.stdout.write(`  ${dim(`${footer}   Mouse: click an item   Scroll to move`)}`);
@@ -247,6 +271,23 @@ async function addRepo(repos) {
   repos.push({ path: root, name: path.basename(root) });
   saveRepos(repos);
   frame("Project added"); process.stdout.write(`  ${green("✓")} ${path.basename(root)}\n  ${dim(root)}\n`); await waitKey();
+}
+
+async function settingsMenu() {
+  while (true) {
+    const themeItems = Object.entries(themes).map(([id, theme]) => ({
+      label: `${theme.name}${settings.theme === id ? "  ✓" : ""}`,
+      hint: id === "ocean" ? "GitDeck default" : "Preview and apply immediately",
+    }));
+    const items = [...themeItems, { label: "Back", key: "b" }];
+    const choice = await choose("Settings", `Color theme  ·  current: ${activeTheme().name}`, items, Object.keys(themes).indexOf(settings.theme));
+    if (choice < 0 || choice === themeItems.length) return;
+    settings.theme = Object.keys(themes)[choice];
+    saveSettings();
+    frame("Theme updated", activeTheme().name);
+    process.stdout.write(`  ${accent("◆")} ${green("Your new theme is active and saved on this device.")}\n`);
+    await waitKey();
+  }
 }
 
 async function updateRepoPath(repo, repos, detectedUnavailable = false) {
@@ -401,10 +442,16 @@ async function main() {
       label: repoName(repo),
       hint: projectHint(repo),
     }));
-    const items = [...projectItems, { label: "+ Add repository", hint: "From a local path", key: "a" }, { label: "Quit", key: "q" }];
+    const items = [
+      ...projectItems,
+      { label: "+ Add repository", hint: "From a local path", key: "a" },
+      { label: "Settings", hint: `Change the app color theme · ${activeTheme().name}`, key: "s" },
+      { label: "Quit", key: "q" },
+    ];
     const choice = await choose("Your repositories", repos.length ? "Select a project to get started" : "Add your first local Git repository", items, 0, true);
     if (choice < 0 || choice === items.length - 1) { clear(); return; }
     if (choice === projectItems.length) await addRepo(repos);
+    else if (choice === projectItems.length + 1) await settingsMenu();
     else if (repos[choice]) await repoMenu(repos[choice], repos);
   }
 }
