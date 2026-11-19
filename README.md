@@ -10,7 +10,7 @@ GitDeck is a lightweight terminal app that keeps your projects in one place. Add
 - Rename a project in the list or relink it after its folder is moved.
 - See each repository's current branch and remote tracking branch.
 - View working tree status, pull updates, and push changes.
-- Open a shell at the repository root. On Windows, the colored PowerShell prompt shows the local and tracking branches and refreshes as you switch branches.
+- Open a shell at the repository root. On Windows, the themed PowerShell prompt shows the current folder, local branch, tracking branch, and last-command status; it refreshes as you work.
 - Remove a repository from GitDeck without deleting its files.
 - No third-party packages or graphical interface required.
 

@@ -268,7 +268,7 @@ function openShell(repo) {
   frame("Project shell", repo.path);
   process.stdout.write(`  ${dim("LOCAL BRANCH")}   ${cyan(local)}\n`);
   process.stdout.write(`  ${dim("TRACKING BRANCH")} ${upstream === "no upstream" ? dim(upstream) : cyan(upstream)}\n\n`);
-  process.stdout.write(`  ${dim("The colored prompt updates these branches as you work. Type exit to return.")}\n\n`);
+  process.stdout.write(`  ${dim("The prompt shows the folder, local branch, and tracking branch. Type exit to return.")}\n\n`);
 
   let shell;
   let args = [];
@@ -276,14 +276,21 @@ function openShell(repo) {
     shell = "powershell.exe";
     const promptScript = [
       "function global:prompt {",
+      "  $lastCommandSucceeded = $?",
+      "  $folderName = Split-Path (Get-Location).Path -Leaf",
+      "  if (-not $folderName) { $folderName = (Get-Location).Path }",
       "  $localBranch = (& git branch --show-current 2>$null | Out-String).Trim()",
       "  if (-not $localBranch) { $localBranch = 'detached HEAD' }",
       "  $upstreamBranch = (& git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>$null | Out-String).Trim()",
-      "  if (-not $upstreamBranch) { $upstreamBranch = 'no upstream' }",
-      "  Write-Host -NoNewline -ForegroundColor DarkGray \"$((Get-Location).Path)  \"",
-      "  Write-Host -NoNewline -ForegroundColor Cyan \"[$localBranch] \"",
-      "  Write-Host -NoNewline -ForegroundColor DarkGray '→ ' ",
-      "  Write-Host -NoNewline -ForegroundColor Magenta \"[$upstreamBranch]\"",
+      "  $statusColor = if ($lastCommandSucceeded) { 'Green' } else { 'Red' }",
+      "  Write-Host -NoNewline -ForegroundColor $statusColor '○ ' ",
+      "  Write-Host -NoNewline -ForegroundColor Green '➜ ' ",
+      "  Write-Host -NoNewline -ForegroundColor Cyan $folderName",
+      "  Write-Host -NoNewline -ForegroundColor Blue ' git:'",
+      "  Write-Host -NoNewline -ForegroundColor DarkGray '('",
+      "  Write-Host -NoNewline -ForegroundColor Red $localBranch",
+      "  Write-Host -NoNewline -ForegroundColor DarkGray ')'",
+      "  if ($upstreamBranch) { Write-Host -NoNewline -ForegroundColor DarkGray ' → '; Write-Host -NoNewline -ForegroundColor Magenta $upstreamBranch }",
       "  Write-Host -NoNewline -ForegroundColor Green \"`n❯ \"",
       "  return ' ' ",
       "}",
