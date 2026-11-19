@@ -7,10 +7,11 @@ GitDeck is a lightweight terminal app that keeps your projects in one place. Add
 ## Features
 
 - Keep a personal list of local Git repositories.
+- Choose an app color theme in **Settings**: Ocean Blue, Emerald, Violet, Amber, or Monochrome. Your choice is saved on your device.
 - Rename a project in the list or relink it after its folder is moved.
 - See each repository's current branch and remote tracking branch.
 - View working tree status, pull updates, and push changes.
-- Open a shell at the repository root. On Windows, the colored PowerShell prompt shows the local and tracking branches and refreshes as you switch branches.
+- Open a shell at the repository root. On Windows, the themed PowerShell prompt shows the current folder, local branch, tracking branch, and last-command status; it refreshes as you work.
 - Remove a repository from GitDeck without deleting its files.
 - No third-party packages or graphical interface required.
 
@@ -32,11 +33,12 @@ You can also start GitDeck with `node gitdeck.js` from the project folder.
 
 ## Using GitDeck
 
-Use the arrow keys to move through a menu and press **Enter** to select an item. Shortcuts are shown next to menu actions.
+Use the arrow keys or mouse wheel to move through a menu, then press **Enter** or click an item to select it. Shortcuts are shown next to menu actions. Mouse input depends on terminal support; keyboard controls remain available.
 
 | Screen | Key | Action |
 | --- | --- | --- |
 | Home | `A` | Add a local repository |
+| Home | `S` | Open settings and change the app theme |
 | Home | `Q` | Quit GitDeck |
 | Project | `S` | View repository status |
 | Project | `L` | Pull updates |
@@ -54,6 +56,8 @@ GitDeck stores repository paths in a small configuration file on your device:
 
 - **Windows:** `%APPDATA%\gitdeck\repositories.json`
 - **macOS and Linux:** `~/.config/gitdeck/repositories.json` (or `$XDG_CONFIG_HOME/gitdeck/repositories.json` when `XDG_CONFIG_HOME` is set)
+
+Your selected color theme is saved alongside the repository list in `settings.json` in the same `gitdeck` configuration folder. It applies the next time GitDeck starts and is kept separate from your project repositories.
 
 The list contains local folder paths. Removing an entry from GitDeck does not remove or modify the repository itself.
 
