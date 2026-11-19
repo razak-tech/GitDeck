@@ -94,21 +94,32 @@ function repoName(repo) { return repo.name || path.basename(repo.path); }
 
 function clear() { process.stdout.write(`${esc}2J${esc}H`); }
 
+function visibleText(value) { return String(value).replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, ""); }
+
+function truncate(value, maxLength) {
+  const chars = Array.from(visibleText(value));
+  if (chars.length <= maxLength) return chars.join("");
+  return `${chars.slice(0, Math.max(0, maxLength - 1)).join("")}…`;
+}
+
+function cursorRowAfter(output) { return 1 + (output.match(/\n/g) || []).length; }
+
 function frame(title, subtitle = "") {
   clear();
   const width = Math.max(24, Math.min(68, (process.stdout.columns || 80) - 6));
-  process.stdout.write(`\n  ${cyan("◆")} ${bold("GITDECK")}  ${dim("/ ")} ${bold(title)}\n`);
-  if (subtitle) process.stdout.write(`  ${dim(subtitle)}\n`);
-  process.stdout.write(`  ${dim("─".repeat(width))}\n\n`);
+  const titleText = truncate(title, Math.max(12, width - 14));
+  const subtitleText = truncate(subtitle, width);
+  const output = `\n  ${cyan("◆")} ${bold("GITDECK")}  ${dim("/ ")} ${bold(titleText)}\n${subtitleText ? `  ${dim(subtitleText)}\n` : ""}  ${dim("─".repeat(width))}\n\n`;
+  process.stdout.write(output);
+  return cursorRowAfter(output);
 }
 
 function mainFrame(subtitle) {
   clear();
-  process.stdout.write("\n");
-  logo.forEach((line) => process.stdout.write(`  ${cyan(line)}\n`));
-  process.stdout.write(`\n  ${dim("LOCAL REPOSITORY MANAGER")}  ${dim("·")}  ${dim("Fast, focused Git workflows")}\n`);
-  process.stdout.write(`  ${dim("─".repeat(Math.max(24, Math.min(68, (process.stdout.columns || 80) - 6))))}\n\n`);
-  process.stdout.write(`  ${bold(subtitle)}\n\n`);
+  const width = Math.max(24, Math.min(68, (process.stdout.columns || 80) - 6));
+  const output = `\n${logo.map((line) => `  ${cyan(line)}\n`).join("")}\n  ${dim("LOCAL REPOSITORY MANAGER")}  ${dim("·")}  ${dim("Fast, focused Git workflows")}\n  ${dim("─".repeat(width))}\n\n  ${bold(truncate(subtitle, width))}\n\n`;
+  process.stdout.write(output);
+  return cursorRowAfter(output);
 }
 
 function prompt(label, initial = "") {
@@ -139,46 +150,82 @@ async function choose(title, subtitle, items, selected = 0, isHome = false) {
   }
   process.stdin.setRawMode(true);
   process.stdin.resume();
+  process.stdout.write("\x1b[?1000h\x1b[?1006h");
   return new Promise((resolve) => {
+    let itemRows = [];
+    let inputBuffer = "";
+    const finish = (choice) => {
+      process.stdin.off("data", onData);
+      process.stdout.write("\x1b[?1006l\x1b[?1000l");
+      process.stdin.pause();
+      resolve(choice);
+    };
     const draw = () => {
-      if (isHome) mainFrame(subtitle);
-      else frame(title, subtitle);
+      let row = isHome ? mainFrame(subtitle) : frame(title, subtitle);
+      itemRows = [];
+      const width = Math.max(24, Math.min(68, (process.stdout.columns || 80) - 6));
       items.forEach((item, i) => {
+        itemRows[i] = row;
         const active = i === selected;
         const marker = active ? cyan("◆") : dim("·");
         const shortcut = item.key ? dim(`[${item.key}] `) : "";
-        const label = active ? inverse(` ${item.label} `) : item.label;
-        process.stdout.write(`  ${marker}  ${shortcut}${label}`);
-        if (item.hint) process.stdout.write(`  ${dim(item.hint)}`);
-        process.stdout.write("\n\n");
+        const labelRoom = Math.min(32, Math.max(8, width - 24));
+        const labelText = truncate(item.label, labelRoom);
+        const label = active ? inverse(` ${labelText} `) : labelText;
+        const hintRoom = Math.max(0, width - 5 - (item.key ? item.key.length + 3 : 0) - labelText.length - 4);
+        const hint = item.hint && hintRoom > 2 ? `  ${dim(truncate(item.hint, hintRoom))}` : "";
+        process.stdout.write(`  ${marker}  ${shortcut}${label}${hint}\n\n`);
+        row += 2;
       });
       const footer = isHome
         ? "↑ ↓ navigate   Enter open   A add repository   Q quit"
         : "↑ ↓ navigate   Enter select   Q back";
       process.stdout.write(`\n  ${dim("─".repeat(Math.max(24, Math.min(68, (process.stdout.columns || 80) - 6))))}\n`);
-      process.stdout.write(`  ${dim(footer)}`);
+      process.stdout.write(`  ${dim(`${footer}   Mouse: click an item   Scroll to move`)}`);
     };
     draw();
     const onData = (buffer) => {
-      const key = buffer.toString();
+      inputBuffer += buffer.toString();
+      const mouseStart = inputBuffer.indexOf("\x1b[<");
+      if (mouseStart >= 0) {
+        const mouseEnd = inputBuffer.slice(mouseStart).search(/[Mm]/);
+        if (mouseEnd < 0) return;
+        const sequence = inputBuffer.slice(mouseStart, mouseStart + mouseEnd + 1);
+        inputBuffer = inputBuffer.slice(0, mouseStart) + inputBuffer.slice(mouseStart + mouseEnd + 1);
+        const mouse = sequence.match(/^\x1b\[<(\d+);(\d+);(\d+)([Mm])$/);
+        if (mouse) {
+          const button = Number(mouse[1]);
+          const y = Number(mouse[3]);
+          if ((button & 64) !== 0 && mouse[4] === "M") {
+            selected = (selected + ((button & 1) === 0 ? -1 : 1) + items.length) % items.length;
+            draw();
+          } else if ((button & 3) === 0 && mouse[4] === "M") {
+            const clicked = itemRows.findIndex((top) => y >= top && y < top + 2);
+            if (clicked >= 0) finish(clicked);
+          }
+        }
+        if (inputBuffer) {
+          const remaining = inputBuffer;
+          inputBuffer = "";
+          onData(Buffer.from(remaining));
+        }
+        return;
+      }
+      if (inputBuffer.startsWith("\x1b[<")) return;
+      const key = inputBuffer;
+      inputBuffer = "";
       if (key === "\u001b[A" || key === "k") selected = (selected - 1 + items.length) % items.length;
       else if (key === "\u001b[B" || key === "j") selected = (selected + 1) % items.length;
       else if (items.some((item) => item.key && key.toLowerCase() === item.key)) {
         const shortcutItem = items.find((item) => item.key && key.toLowerCase() === item.key);
-        process.stdin.off("data", onData);
-        process.stdin.pause();
-        resolve(items.indexOf(shortcutItem));
+        finish(items.indexOf(shortcutItem));
         return;
       }
       else if (key === "\r" || key === "\n") {
-        process.stdin.off("data", onData);
-        process.stdin.pause();
-        resolve(selected);
+        finish(selected);
         return;
       } else if (key === "q" || key === "\u0003" || key === "\u001b") {
-        process.stdin.off("data", onData);
-        process.stdin.pause();
-        resolve(-1);
+        finish(-1);
         return;
       }
       draw();

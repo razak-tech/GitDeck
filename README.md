@@ -32,7 +32,7 @@ You can also start GitDeck with `node gitdeck.js` from the project folder.
 
 ## Using GitDeck
 
-Use the arrow keys to move through a menu and press **Enter** to select an item. Shortcuts are shown next to menu actions.
+Use the arrow keys or mouse wheel to move through a menu, then press **Enter** or click an item to select it. Shortcuts are shown next to menu actions. Mouse input depends on terminal support; keyboard controls remain available.
 
 | Screen | Key | Action |
 | --- | --- | --- |
