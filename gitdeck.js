@@ -18,6 +18,7 @@ const cyan = (s) => color("38;5;81", s);
 const dim = (s) => color("38;5;245", s);
 const green = (s) => color("38;5;114", s);
 const red = (s) => color("38;5;203", s);
+const yellow = (s) => color("38;5;220", s);
 const bold = (s) => color("1", s);
 const inverse = (s) => color("48;5;238;1", s);
 
@@ -46,22 +47,47 @@ function saveRepos(repos) {
   fs.writeFileSync(registryFile, `${JSON.stringify(repos, null, 2)}\n`, "utf8");
 }
 
-function git(args, cwd) {
-  return spawnSync("git", args, { cwd, encoding: "utf8", windowsHide: true });
+function git(args, cwd, options = {}) {
+  try {
+    return spawnSync("git", args, { cwd, encoding: "utf8", windowsHide: true, ...options });
+  } catch (error) {
+    return { status: 1, stdout: "", stderr: error.message };
+  }
+}
+
+function resolveRepoInput(value) {
+  const unquoted = value.trim().replace(/^["']|["']$/g, "");
+  return path.resolve(unquoted.replace(/^~(?=$|[\\/])/, home));
+}
+
+function repositoryRoot(dir) {
+  try {
+    if (!fs.statSync(dir).isDirectory()) return "";
+  } catch { return ""; }
+  const result = git(["rev-parse", "--show-toplevel"], dir);
+  return result.status === 0 ? path.resolve(result.stdout.trim()) : "";
 }
 
 function branchAt(dir) {
+  if (!fs.existsSync(dir)) return "path missing";
   const result = git(["branch", "--show-current"], dir);
-  return result.status === 0 ? (result.stdout.trim() || "detached HEAD") : "unavailable";
+  return result.status === 0 ? (result.stdout.trim() || "detached HEAD") : "not a repository";
 }
 
 function upstreamAt(dir) {
+  if (!fs.existsSync(dir)) return "unavailable";
   const result = git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"], dir);
   return result.status === 0 ? result.stdout.trim() : "no upstream";
 }
 
 function branchLabel(dir) {
   return `${branchAt(dir)}  →  ${upstreamAt(dir)}`;
+}
+
+function projectHint(repo) {
+  const root = repositoryRoot(repo.path);
+  if (!root) return `${yellow("PATH UNAVAILABLE")}  ·  Select to update`;
+  return `${branchLabel(root)}  ·  ${path.dirname(root)}`;
 }
 
 function repoName(repo) { return repo.name || path.basename(repo.path); }
@@ -164,21 +190,61 @@ async function choose(title, subtitle, items, selected = 0, isHome = false) {
 async function addRepo(repos) {
   frame("Add a project", "Add the local path to an existing Git repository");
   const entered = await prompt("Repository path", process.cwd());
-  const dir = path.resolve(entered.replace(/^~(?=$|[\\/])/, home));
-  if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
-    frame("Could not add project"); process.stdout.write(`  ${red("This folder does not exist.")}\n`); await waitKey(); return;
-  }
-  const check = git(["rev-parse", "--show-toplevel"], dir);
-  if (check.status !== 0) {
+  const root = repositoryRoot(resolveRepoInput(entered));
+  if (!root) {
     frame("Could not add project"); process.stdout.write(`  ${red("This folder is not a Git repository.")}\n`); await waitKey(); return;
   }
-  const root = path.resolve(check.stdout.trim());
   if (repos.some((r) => path.resolve(r.path).toLowerCase() === root.toLowerCase())) {
     frame("Project already added"); process.stdout.write(`  ${repoName({ path: root })}\n`); await waitKey(); return;
   }
   repos.push({ path: root, name: path.basename(root) });
   saveRepos(repos);
   frame("Project added"); process.stdout.write(`  ${green("✓")} ${path.basename(root)}\n  ${dim(root)}\n`); await waitKey();
+}
+
+async function updateRepoPath(repo, repos, detectedUnavailable = false) {
+  frame(detectedUnavailable ? "Project path unavailable" : "Update project path", `${repoName(repo)}  ·  Current: ${repo.path}`);
+  if (detectedUnavailable) {
+    process.stdout.write(`  ${yellow("The saved folder is missing or is no longer a Git repository.")}\n\n`);
+  }
+  const entered = await prompt("Enter the new repository path (blank to cancel)");
+  if (!entered) return false;
+
+  const root = repositoryRoot(resolveRepoInput(entered));
+  if (!root) {
+    frame("Path not updated");
+    process.stdout.write(`  ${red("That folder is not an accessible Git repository.")}\n`);
+    await waitKey();
+    return false;
+  }
+  const duplicate = repos.find((item) => item !== repo && path.resolve(item.path).toLowerCase() === root.toLowerCase());
+  if (duplicate) {
+    frame("Path not updated");
+    process.stdout.write(`  ${red(`That path is already registered as ${repoName(duplicate)}.`)}\n`);
+    await waitKey();
+    return false;
+  }
+
+  const oldPath = repo.path;
+  repo.path = root;
+  saveRepos(repos);
+  frame("Project path changed", repoName(repo));
+  process.stdout.write(`  ${dim("FROM")} ${oldPath}\n`);
+  process.stdout.write(`  ${green("TO  ")} ${root}\n`);
+  await waitKey();
+  return true;
+}
+
+async function renameRepo(repo, repos) {
+  frame("Rename project", `Current name: ${repoName(repo)}`);
+  const entered = await prompt("New project name");
+  const name = entered.trim();
+  if (!name) return;
+  repo.name = name;
+  saveRepos(repos);
+  frame("Project renamed", name);
+  process.stdout.write(`  ${green("✓ Name updated.")}\n`);
+  await waitKey();
 }
 
 async function showStatus(repo) {
@@ -234,17 +300,23 @@ function openShell(repo) {
 }
 
 async function repoMenu(repo, repos) {
+  if (!repositoryRoot(repo.path)) {
+    const updated = await updateRepoPath(repo, repos, true);
+    if (!updated) return;
+  }
   while (true) {
     const actions = [
       { label: "View status", hint: "Changes and current branch", key: "s" },
       { label: "Pull updates", hint: "git pull", key: "l" },
       { label: "Push changes", hint: "git push", key: "u" },
       { label: "Open project shell", hint: "Starts in the repository folder", key: "t" },
+      { label: "Rename project", hint: "Change its display name", key: "n" },
+      { label: "Update project path", hint: "Relink a moved repository", key: "p" },
       { label: "Remove from list", hint: "Repository files are kept", key: "r" },
       { label: "Back", key: "b" },
     ];
     const choice = await choose(repoName(repo), `${repo.path}  ·  ${branchLabel(repo.path)}`, actions);
-    if (choice < 0 || choice === 5) return;
+    if (choice < 0 || choice === 7) return;
     if (choice === 0) await showStatus(repo);
     if (choice === 1 || choice === 2) {
       const operation = choice === 1 ? "pull" : "push";
@@ -256,7 +328,9 @@ async function repoMenu(repo, repos) {
     if (choice === 3) {
       await openShell(repo);
     }
-    if (choice === 4) {
+    if (choice === 4) await renameRepo(repo, repos);
+    if (choice === 5) await updateRepoPath(repo, repos);
+    if (choice === 6) {
       const ok = await prompt("Type yes to remove this project from the list");
       if (ok.toLowerCase() === "yes") {
         saveRepos(repos.filter((r) => r !== repo));
@@ -271,7 +345,7 @@ async function main() {
   while (true) {
     const projectItems = repos.map((repo) => ({
       label: repoName(repo),
-      hint: `${branchLabel(repo.path)}  ·  ${path.dirname(repo.path)}`,
+      hint: projectHint(repo),
     }));
     const items = [...projectItems, { label: "+ Add repository", hint: "From a local path", key: "a" }, { label: "Quit", key: "q" }];
     const choice = await choose("Your repositories", repos.length ? "Select a project to get started" : "Add your first local Git repository", items, 0, true);
